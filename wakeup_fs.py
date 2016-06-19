@@ -5,13 +5,17 @@ from __future__ import with_statement
 import os
 import sys
 import errno
-
+import time
+from state_machine import StateMachine
 from fuse import FUSE, FuseOSError, Operations
+
+from threading import Thread
 
 
 class Passthrough(Operations):
-    def __init__(self, root):
+    def __init__(self, root, tt):
         self.root = root
+        self.tt = tt
 
     # Helpers
     # =======
@@ -105,6 +109,8 @@ class Passthrough(Operations):
         return os.open(full_path, os.O_WRONLY | os.O_CREAT, mode)
 
     def read(self, path, length, offset, fh):
+        print "Reading ",path
+        print "Timer count: ",self.tt.count()
         os.lseek(fh, offset, os.SEEK_SET)
         return os.read(fh, length)
 
@@ -119,16 +125,137 @@ class Passthrough(Operations):
 
     def flush(self, path, fh):
         return os.fsync(fh)
-
     def release(self, path, fh):
         return os.close(fh)
 
     def fsync(self, path, fdatasync, fh):
         return self.flush(path, fh)
 
+class State:
+    #By default, if not defined, a state should block
+    #filesystem events
+    def blockOnFsEvent(self):
+        return True
 
-def main(mountpoint, root):
-    FUSE(Passthrough(root), mountpoint, nothreads=True, foreground=True)
+    #Default handler for filesystem events
+    def fsevent(self,machine):
+        print "fsevent called an not overloaded in ",self.__class__.__name__
+        return self
 
+    #Handler for timer events
+    def timerevent(self,machine):
+        print "timer event called in ",self.__class__.__name__
+        return self
+
+class Failed(State):
+    def __init__(self,reason):
+        print "Entering failed state for reason:\n"
+        print reason,"\n"
+
+class PoweringOff(State):
+    def unount(self):
+        pass
+
+    def sendPowerOff(self):
+        pass
+    
+    def timerevent(self,machine):
+        self.unount()
+        self.sendPoweroff()
+        
+class MachineActive(State):
+    def __init__(self):
+        self.idlecounter = 0
+
+    def blockOnFsEvent(self):
+        return False
+    
+    def sanityCheck(self):
+        '''
+        Every so often perform a sanity check to make sure that
+        the filesystem is still mounted and ping is still valid
+        '''
+    
+    def timerevent(self,machine):
+        '''
+        If we timeout, then transition to the power off state
+        '''
+        if self.sanityCheck() != "Success":
+            return PowerOnSent()
+        
+        self.idlecounter += 1
+        if self.idlecounter > 300:
+            return PoweringOff()
+        else:
+            return self
+
+    def fsevent(self,machine):
+        '''
+        Any filesystem activity re-sets the idle counter
+        Back to zero and we stay in the current state
+        '''
+        self.idlecounter = 0
+        return self
+
+        
+class NetworkUp(State):
+    def timerevent(self,machine):
+        if self.mount() == "Success":
+            return MachineActive()
+        else:
+            return Failed("Couldn't mount filesystem!")
+        
+class MachineOn(State):
+    def __init__(self):
+        self.sshfailcount = 0
+        
+    def trySsh(self):
+        pass #TODO
+        
+    def timerevent(self,machine):
+        if self.sshcount > 3:
+            return Failed("SSH could not be established!")
+        elif self.trySsh() == "Success":
+            return NetworkUp()
+        else:
+            return self
+
+class PowerOnSent(State):
+    def __init__(self):
+        self.pingcount = 0
+
+    def sendping(self):
+        pass #TODO true on success ping
+        
+    def timerevent(self,machine):
+        if self.pingcount > 3:
+            return Failed("Ping could not be established!")
+        elif self.sendping() == "Success":
+            return MachineOn()
+        else:
+            return self
+    
+class FsMachineOff(State):
+    def blockOnFsEvent(self):
+        return False
+
+    def sendPowerOn(self):
+        pass #TODO send power on
+    
+    def fsevent(self,machine):
+        self.sendPowerOn()
+        return StatePowerOnSent()
+
+            
+def main(mountpoint,root):
+    sm = StateMachine(FsMachineOff())
+    print "Initial Count:" , sm.count()
+    sm.start()
+    FUSE(Passthrough(root,sm), mountpoint, nothreads=True, foreground=True)
+    sm.terminate()
+    sm.join()
+    
 if __name__ == '__main__':
     main(sys.argv[2], sys.argv[1])
+
+        
