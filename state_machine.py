@@ -66,11 +66,14 @@ if __name__ == '__main__':
             self.called = False
             return value
 
-        def timerevent(self,machine):
+        def timerevent(self,config):
             return self
 
-        def fsevent(self,machine):
+        def fsevent(self,config):
             return self
+
+    class MockConfig:
+        pass #A dummy config class
         
     class TestStateMachine(unittest.TestCase):
         def test_stateProgression(self):
@@ -82,7 +85,7 @@ if __name__ == '__main__':
 
 
         def test_blockOnFsEvent(self):
-            sm = StateMachine(State1())
+            sm = StateMachine(State1(),MockConfig())
             #Don't start the timer thread
             #send an FS event
             sm.fsevent()

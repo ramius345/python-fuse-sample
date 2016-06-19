@@ -131,21 +131,6 @@ class Passthrough(Operations):
     def fsync(self, path, fdatasync, fh):
         return self.flush(path, fh)
 
-class State:
-    #By default, if not defined, a state should block
-    #filesystem events
-    def blockOnFsEvent(self):
-        return True
-
-    #Default handler for filesystem events
-    def fsevent(self,machine):
-        print "fsevent called an not overloaded in ",self.__class__.__name__
-        return self
-
-    #Handler for timer events
-    def timerevent(self,machine):
-        print "timer event called in ",self.__class__.__name__
-        return self
 
 class Failed(State):
     def __init__(self,reason):
@@ -220,31 +205,7 @@ class MachineOn(State):
         else:
             return self
 
-class PowerOnSent(State):
-    def __init__(self):
-        self.pingcount = 0
-
-    def sendping(self):
-        pass #TODO true on success ping
-        
-    def timerevent(self,machine):
-        if self.pingcount > 3:
-            return Failed("Ping could not be established!")
-        elif self.sendping() == "Success":
-            return MachineOn()
-        else:
-            return self
     
-class FsMachineOff(State):
-    def blockOnFsEvent(self):
-        return False
-
-    def sendPowerOn(self):
-        pass #TODO send power on
-    
-    def fsevent(self,machine):
-        self.sendPowerOn()
-        return StatePowerOnSent()
 
             
 def main(mountpoint,root):
