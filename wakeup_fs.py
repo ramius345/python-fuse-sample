@@ -131,12 +131,6 @@ class Passthrough(Operations):
     def fsync(self, path, fdatasync, fh):
         return self.flush(path, fh)
 
-
-class Failed(State):
-    def __init__(self,reason):
-        print "Entering failed state for reason:\n"
-        print reason,"\n"
-
 class PoweringOff(State):
     def unount(self):
         pass

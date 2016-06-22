@@ -49,12 +49,19 @@ if __name__ == '__main__':
             global_msg = msg
         
         def test_sendPowerOn(self):
+            #dont send an actual power on, but override so
+            #that we can do verification
             real_send_packet = FsMachineOff.sendUdpPacket
             FsMachineOff.sendUdpPacket = self.mock_send_function
+
+            #perform test
             fmo = FsMachineOff()
-            fmo.fsevent(MockConfig())
+            returned_state = fmo.fsevent(MockConfig())
             expected_msg = '\xff' * 6 + '\xd0\x50\x99\x85\x0c\x46' * 16
             self.assertTrue( global_msg == expected_msg)
+            self.assertTrue( returned_state.__class__.__name__ == 'PowerOnSent' )
+
+            #cleanup
             FsMachineOff.sendUdpPacket = real_send_packet
 
         def test_sendPowerOnReal(self):
